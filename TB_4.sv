@@ -1,5 +1,5 @@
 module uart_tx_tb_n(uart_if.tb_mp intf);
-`include "uart_packet.sv"
+`include "uart_packet4.sv"
 
   typedef struct packed {
      logic         tx; 
@@ -25,7 +25,7 @@ module uart_tx_tb_n(uart_if.tb_mp intf);
     foreach (stim_array[i]) begin
       stim_array[i] = new();
       assert(stim_array[i].randomize()) else $finish;
-      stim_array[i].uart_cov.sample();
+      stim_array[i].sample_coverage();
     end
   endtask
 
@@ -80,6 +80,53 @@ task automatic drive_stim();
       //collect tx_busy=0 and tx =1
       collect_output_data(intf.tx, intf.tx_busy);
     end
+endtask
+
+// Task to test reset during transmission for FSM coverage
+task automatic test_reset_scenarios();
+    // Test reset during START state
+    @(negedge intf.clk);
+    intf.rst_n = 1;
+    intf.data_in = 8'hAA;
+    intf.parity_en = 1;
+    intf.even_parity = 1;
+    intf.tx_start = 1;
+    @(negedge intf.clk);
+    intf.tx_start = 0;
+    // Reset during START state
+    @(negedge intf.clk);
+    intf.rst_n = 0;
+    @(negedge intf.clk);
+    intf.rst_n = 1;
+    
+    // Test reset during DATA state
+    @(negedge intf.clk);
+    intf.data_in = 8'h55;
+    intf.parity_en = 1;
+    intf.tx_start = 1;
+    @(negedge intf.clk);
+    intf.tx_start = 0;
+    @(negedge intf.clk); // START state
+    @(negedge intf.clk); // DATA state
+    @(negedge intf.clk); // Still in DATA state
+    // Reset during DATA state
+    intf.rst_n = 0;
+    @(negedge intf.clk);
+    intf.rst_n = 1;
+    
+    // Test reset during PARITY state
+    @(negedge intf.clk);
+    intf.data_in = 8'hFF;
+    intf.parity_en = 1;
+    intf.tx_start = 1;
+    @(negedge intf.clk);
+    intf.tx_start = 0;
+    // Wait until parity state
+    repeat(9) @(negedge intf.clk); // START + 8 DATA bits
+    // Reset during PARITY state
+    intf.rst_n = 0;
+    @(negedge intf.clk);
+    intf.rst_n = 1;
 endtask
 
 task collect_output_data(logic tx, logic tx_busy);
@@ -158,9 +205,12 @@ endtask
     configure_stim_storage(100);
     generate_stimulus(stim_array);
     drive_stim();
+    
+    // Test reset scenarios for better FSM coverage
+    test_reset_scenarios();
+    
     golden_model();
     check_results();
-
 
   end
 endmodule
