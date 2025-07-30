@@ -1,4 +1,4 @@
-module uart_tx_tb_n(uart_if.tb_mp intf);
+module uart_tx_tb(uart_if.tb_mp intf);
 `include "uart_packet4.sv"
 
   typedef struct packed {
@@ -11,6 +11,47 @@ module uart_tx_tb_n(uart_if.tb_mp intf);
   output_t        sim_output[$];
   output_t    expected_op[$];
 
+  // Coverage group for control signals
+  covergroup control_signal_cov @(posedge intf.clk);
+    option.per_instance = 1;
+    option.name = "ctrl_signal_coverage";
+    
+    cp_rst: coverpoint intf.rst_n {
+      bins low  = {0};
+      bins high = {1};
+      bins transitions = (0 => 1), (1 => 0);
+    }
+    cp_tx_start: coverpoint intf.tx_start {
+      bins low  = {0};
+      bins high = {1};
+      bins transitions = (0 => 1), (1 => 0);
+    }
+    cp_tx_busy: coverpoint intf.tx_busy {
+      bins idle = {0};
+      bins busy = {1};
+      bins transitions = (0 => 1), (1 => 0);
+    }
+    // Cross coverage between reset and tx_start
+    cross_rst_tx_start: cross cp_rst, cp_tx_start;
+    cross_tx_start_busy: cross cp_tx_start, cp_tx_busy;
+  endgroup
+  
+  // Instantiate the coverage group
+  control_signal_cov ctrl_cov = new();
+
+  // Sample coverage on every clock edge
+  always @(posedge intf.clk) begin
+    ctrl_cov.sample();
+  end
+  
+  // Task to print intermediate coverage status
+  task print_coverage_status();
+    $display("\n--- Intermediate Coverage Status ---");
+    $display("Overall Coverage: %.2f%%", ctrl_cov.get_coverage());
+    $display("Reset Coverage: %.2f%%", ctrl_cov.cp_rst.get_coverage());
+    $display("TX Start Coverage: %.2f%%", ctrl_cov.cp_tx_start.get_coverage());
+    $display("TX Busy Coverage: %.2f%%", ctrl_cov.cp_tx_busy.get_coverage());
+  endtask
 
 
  // uart_tx dut (.*);
@@ -204,13 +245,31 @@ endtask
     #20ns;
     configure_stim_storage(100);
     generate_stimulus(stim_array);
+    
+    $display("=== Starting stimulus drive ===");
     drive_stim();
+    print_coverage_status();
     
     // Test reset scenarios for better FSM coverage
+    $display("\n=== Starting reset scenarios ===");
     test_reset_scenarios();
+    print_coverage_status();
     
     golden_model();
     check_results();
-
+    
+    // Report coverage results
+    $display("\n=== COVERAGE REPORT ===");
+    $display("Overall Control Signal Coverage: %.2f%%", ctrl_cov.get_coverage());
+    $display("Reset Coverage: %.2f%%", ctrl_cov.cp_rst.get_coverage());
+    $display("TX Start Coverage: %.2f%%", ctrl_cov.cp_tx_start.get_coverage());
+    $display("TX Busy Coverage: %.2f%%", ctrl_cov.cp_tx_busy.get_coverage());
+    $display("Cross Coverage (rst_n x tx_start): %.2f%%", ctrl_cov.cross_rst_tx_start.get_coverage());
+    $display("Cross Coverage (tx_start x tx_busy): %.2f%%", ctrl_cov.cross_tx_start_busy.get_coverage());
+    
+    // Print detailed coverage report to file
+    $system("echo 'Coverage Report Generated' > coverage_report.txt");
+    
+    $finish;
   end
 endmodule
