@@ -1,5 +1,5 @@
 module uart_tx_tb_n(uart_if.tb_mp intf);
-`include "uart_packet.sv"
+`include "uart_packet4.sv"
 
   typedef struct packed {
      logic         tx; 
@@ -25,7 +25,7 @@ module uart_tx_tb_n(uart_if.tb_mp intf);
     foreach (stim_array[i]) begin
       stim_array[i] = new();
       assert(stim_array[i].randomize()) else $finish;
-      stim_array[i].uart_cov.sample();
+      stim_array[i].sample_coverage();
     end
   endtask
 
