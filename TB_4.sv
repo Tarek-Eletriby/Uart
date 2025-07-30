@@ -82,6 +82,53 @@ task automatic drive_stim();
     end
 endtask
 
+// Task to test reset during transmission for FSM coverage
+task automatic test_reset_scenarios();
+    // Test reset during START state
+    @(negedge intf.clk);
+    intf.rst_n = 1;
+    intf.data_in = 8'hAA;
+    intf.parity_en = 1;
+    intf.even_parity = 1;
+    intf.tx_start = 1;
+    @(negedge intf.clk);
+    intf.tx_start = 0;
+    // Reset during START state
+    @(negedge intf.clk);
+    intf.rst_n = 0;
+    @(negedge intf.clk);
+    intf.rst_n = 1;
+    
+    // Test reset during DATA state
+    @(negedge intf.clk);
+    intf.data_in = 8'h55;
+    intf.parity_en = 1;
+    intf.tx_start = 1;
+    @(negedge intf.clk);
+    intf.tx_start = 0;
+    @(negedge intf.clk); // START state
+    @(negedge intf.clk); // DATA state
+    @(negedge intf.clk); // Still in DATA state
+    // Reset during DATA state
+    intf.rst_n = 0;
+    @(negedge intf.clk);
+    intf.rst_n = 1;
+    
+    // Test reset during PARITY state
+    @(negedge intf.clk);
+    intf.data_in = 8'hFF;
+    intf.parity_en = 1;
+    intf.tx_start = 1;
+    @(negedge intf.clk);
+    intf.tx_start = 0;
+    // Wait until parity state
+    repeat(9) @(negedge intf.clk); // START + 8 DATA bits
+    // Reset during PARITY state
+    intf.rst_n = 0;
+    @(negedge intf.clk);
+    intf.rst_n = 1;
+endtask
+
 task collect_output_data(logic tx, logic tx_busy);
     output_t out_0;
     out_0.tx=tx;
@@ -158,9 +205,12 @@ endtask
     configure_stim_storage(100);
     generate_stimulus(stim_array);
     drive_stim();
+    
+    // Test reset scenarios for better FSM coverage
+    test_reset_scenarios();
+    
     golden_model();
     check_results();
-
 
   end
 endmodule
